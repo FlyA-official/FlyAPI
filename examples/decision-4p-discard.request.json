@@ -1,0 +1,37 @@
+{
+  "request_id": "example-4p-discard-0001",
+  "session_id": "example-table-4p-0001",
+  "state": {
+    "schema": "flya-mahjong-events-v2",
+    "rule_line": "riichi4p",
+    "viewer_seat": 0,
+    "source": { "kind": "observed" },
+    "from_seq": 0,
+    "to_seq": 3,
+    "events": [
+      {
+        "type": "start_game",
+        "names": ["player", "seat-1", "seat-2", "seat-3"],
+        "seed": null
+      },
+      {
+        "type": "start_kyoku",
+        "bakaze": "E",
+        "dora_marker": "3p",
+        "kyoku": 1,
+        "honba": 0,
+        "kyotaku": 0,
+        "oya": 0,
+        "scores": [25000, 25000, 25000, 25000],
+        "tehais": [
+          ["P", "5p", "W", "N", "7m", "2m", "2p", "1m", "C", "8p", "9m", "6s", "N"],
+          ["?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?"],
+          ["?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?"],
+          ["?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?"]
+        ]
+      },
+      { "type": "tsumo", "actor": 0, "pai": "2s" }
+    ]
+  },
+  "deadline_ms": 8000
+}

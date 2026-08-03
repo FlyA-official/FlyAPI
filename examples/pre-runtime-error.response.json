@@ -1,0 +1,4 @@
+{
+  "error": "state_digest_mismatch",
+  "message": "state_digest does not match canonical events"
+}

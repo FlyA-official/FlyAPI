@@ -1,0 +1,426 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/FlyA-official/FlyAPI/schemas/flya-mahjong-events-v2.schema.json",
+  "title": "FlyA observed Mahjong event state v2",
+  "oneOf": [
+    { "$ref": "#/$defs/state4p" },
+    { "$ref": "#/$defs/state3p" }
+  ],
+  "$defs": {
+    "tile": {
+      "type": "string",
+      "pattern": "^(?:[1-9][mps]|5[mps]r|[ESWNPFC]|\\?)$"
+    },
+    "visibleTile": {
+      "type": "string",
+      "pattern": "^(?:[1-9][mps]|5[mps]r|[ESWNPFC])$"
+    },
+    "source": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "observed" },
+        "epoch": { "type": "integer", "minimum": 0 },
+        "status": { "type": "string", "maxLength": 64 }
+      },
+      "additionalProperties": false
+    },
+    "scoring": {
+      "type": "object",
+      "required": ["agari", "point", "additional_hans", "dora_han", "red_dora_han", "ura_dora_han", "nuki_dora_han", "yaku_flags"],
+      "properties": {
+        "agari": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["kind", "fu", "han"],
+              "properties": {
+                "kind": { "const": "normal" },
+                "fu": { "type": "integer", "minimum": 0, "maximum": 255 },
+                "han": { "type": "integer", "minimum": 0, "maximum": 255 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind", "count"],
+              "properties": {
+                "kind": { "const": "yakuman" },
+                "count": { "type": "integer", "minimum": 1, "maximum": 255 }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "point": {
+          "type": "object",
+          "required": ["ron", "tsumo_ko", "tsumo_oya"],
+          "properties": {
+            "ron": { "type": "integer" },
+            "tsumo_ko": { "type": "integer" },
+            "tsumo_oya": { "type": "integer" }
+          },
+          "additionalProperties": false
+        },
+        "additional_hans": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "dora_han": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "red_dora_han": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "ura_dora_han": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "nuki_dora_han": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "yaku_flags": {
+          "type": "object",
+          "required": ["riichi", "double_riichi", "ippatsu", "menzen_tsumo", "haitei", "houtei", "rinshan", "chankan", "tenhou", "chiihou"],
+          "properties": {
+            "riichi": { "type": "boolean" },
+            "double_riichi": { "type": "boolean" },
+            "ippatsu": { "type": "boolean" },
+            "menzen_tsumo": { "type": "boolean" },
+            "haitei": { "type": "boolean" },
+            "houtei": { "type": "boolean" },
+            "rinshan": { "type": "boolean" },
+            "chankan": { "type": "boolean" },
+            "tenhou": { "type": "boolean" },
+            "chiihou": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "startGame4p": {
+      "type": "object",
+      "required": ["type", "names"],
+      "properties": {
+        "type": { "const": "start_game" },
+        "names": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "string" } },
+        "seed": { "type": "null" },
+        "id": { "type": "integer", "minimum": 0, "maximum": 3 }
+      },
+      "additionalProperties": false
+    },
+    "startGame3p": {
+      "type": "object",
+      "required": ["type", "names"],
+      "properties": {
+        "type": { "const": "start_game" },
+        "names": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "string" } },
+        "seed": { "type": "null" },
+        "id": { "type": "integer", "minimum": 0, "maximum": 2 }
+      },
+      "additionalProperties": false
+    },
+    "startKyoku4p": {
+      "type": "object",
+      "required": ["type", "bakaze", "dora_marker", "kyoku", "honba", "kyotaku", "oya", "scores", "tehais"],
+      "properties": {
+        "type": { "const": "start_kyoku" },
+        "bakaze": { "$ref": "#/$defs/visibleTile" },
+        "dora_marker": { "$ref": "#/$defs/visibleTile" },
+        "kyoku": { "type": "integer", "minimum": 1, "maximum": 255 },
+        "honba": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "kyotaku": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "oya": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "scores": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "integer" } },
+        "tehais": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "type": "array", "minItems": 13, "maxItems": 13, "items": { "$ref": "#/$defs/tile" } }
+        }
+      },
+      "additionalProperties": false
+    },
+    "startKyoku3p": {
+      "type": "object",
+      "required": ["type", "bakaze", "dora_marker", "kyoku", "honba", "kyotaku", "oya", "scores", "tehais"],
+      "properties": {
+        "type": { "const": "start_kyoku" },
+        "bakaze": { "$ref": "#/$defs/visibleTile" },
+        "dora_marker": { "$ref": "#/$defs/visibleTile" },
+        "kyoku": { "type": "integer", "minimum": 1, "maximum": 255 },
+        "honba": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "kyotaku": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "oya": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "scores": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "integer" } },
+        "tehais": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "array", "minItems": 13, "maxItems": 13, "items": { "$ref": "#/$defs/tile" } }
+        }
+      },
+      "additionalProperties": false
+    },
+    "turnEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "actor", "pai"],
+          "properties": {
+            "type": { "enum": ["tsumo", "dealer_opening"] },
+            "actor": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "pai": { "$ref": "#/$defs/tile" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "actor", "pai", "tsumogiri"],
+          "properties": {
+            "type": { "const": "dahai" },
+            "actor": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "pai": { "$ref": "#/$defs/visibleTile" },
+            "tsumogiri": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "actor", "pai"],
+          "properties": {
+            "type": { "const": "dealer_opening_dahai" },
+            "actor": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "pai": { "$ref": "#/$defs/visibleTile" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "callEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "actor", "target", "pai", "consumed"],
+          "properties": {
+            "type": { "enum": ["chi", "pon"] },
+            "actor": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "target": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "pai": { "$ref": "#/$defs/visibleTile" },
+            "consumed": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/visibleTile" } }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "actor", "target", "pai", "consumed"],
+          "properties": {
+            "type": { "const": "daiminkan" },
+            "actor": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "target": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "pai": { "$ref": "#/$defs/visibleTile" },
+            "consumed": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/visibleTile" } }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "actor", "pai", "consumed"],
+          "properties": {
+            "type": { "const": "kakan" },
+            "actor": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "pai": { "$ref": "#/$defs/visibleTile" },
+            "consumed": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/visibleTile" } }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "actor", "consumed"],
+          "properties": {
+            "type": { "const": "ankan" },
+            "actor": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "consumed": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "$ref": "#/$defs/visibleTile" } }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "simpleEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "dora_marker"],
+          "properties": { "type": { "const": "dora" }, "dora_marker": { "$ref": "#/$defs/visibleTile" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "actor"],
+          "properties": { "type": { "const": "reach" }, "actor": { "type": "integer", "minimum": 0, "maximum": 3 } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "actor"],
+          "properties": {
+            "type": { "const": "reach_accepted" },
+            "actor": { "type": "integer", "minimum": 0, "maximum": 3 },
+            "scores": { "type": "array", "minItems": 3, "maxItems": 4, "items": { "type": "integer" } },
+            "deltas": { "type": "array", "minItems": 3, "maxItems": 4, "items": { "type": "integer" } }
+          },
+          "additionalProperties": false
+        },
+        { "type": "object", "required": ["type"], "properties": { "type": { "enum": ["end_kyoku"] } }, "additionalProperties": false }
+      ]
+    },
+    "horaEvent": {
+      "type": "object",
+      "required": ["type", "actor", "target"],
+      "properties": {
+        "type": { "const": "hora" },
+        "actor": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "target": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "deltas": { "oneOf": [{ "type": "null" }, { "type": "array", "minItems": 3, "maxItems": 4, "items": { "type": "integer" } }] },
+        "ura_markers": { "oneOf": [{ "type": "null" }, { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/visibleTile" } }] },
+        "scoring": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/scoring" }] },
+        "pai": { "$ref": "#/$defs/visibleTile" },
+        "uradora_markers": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/visibleTile" } },
+        "hora_tehais": { "type": "array", "maxItems": 18, "items": { "$ref": "#/$defs/visibleTile" } },
+        "yakus": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "type": "array",
+            "prefixItems": [{ "type": "string", "maxLength": 32 }, { "type": "integer", "minimum": 0, "maximum": 255 }],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "fu": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "fan": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "hora_points": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "scores": { "type": "array", "minItems": 3, "maxItems": 4, "items": { "type": "integer", "minimum": -1000000, "maximum": 1000000 } },
+        "nuki_dora": { "type": "integer", "minimum": 0, "maximum": 255 }
+      },
+      "additionalProperties": false
+    },
+    "ryukyokuEvent": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "ryukyoku" },
+        "deltas": { "oneOf": [{ "type": "null" }, { "type": "array", "minItems": 3, "maxItems": 4, "items": { "type": "integer" } }] },
+        "reason": { "type": "string", "maxLength": 32 },
+        "tenpais": { "type": "array", "minItems": 3, "maxItems": 4, "items": { "type": "boolean" } },
+        "tehais": { "type": "array", "minItems": 3, "maxItems": 4, "items": { "type": "array", "maxItems": 18, "items": { "$ref": "#/$defs/visibleTile" } } },
+        "scores": { "type": "array", "minItems": 3, "maxItems": 4, "items": { "type": "integer", "minimum": -1000000, "maximum": 1000000 } }
+      },
+      "additionalProperties": false
+    },
+    "endGameEvent": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "end_game" },
+        "scores": { "type": "array", "minItems": 3, "maxItems": 4, "items": { "type": "integer", "minimum": -1000000, "maximum": 1000000 } },
+        "rankings": { "type": "array", "minItems": 3, "maxItems": 4, "items": { "type": "integer", "minimum": 1, "maximum": 4 } }
+      },
+      "additionalProperties": false
+    },
+    "kitaEvent": {
+      "type": "object",
+      "required": ["type", "actor", "pai"],
+      "properties": {
+        "type": { "const": "kita" },
+        "actor": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "pai": { "const": "N" }
+      },
+      "additionalProperties": false
+    },
+    "event4p": {
+      "allOf": [
+        {
+          "oneOf": [
+            { "$ref": "#/$defs/startGame4p" },
+            { "$ref": "#/$defs/startKyoku4p" },
+            { "$ref": "#/$defs/turnEvent" },
+            { "$ref": "#/$defs/callEvent" },
+            { "$ref": "#/$defs/simpleEvent" },
+            { "$ref": "#/$defs/horaEvent" },
+            { "$ref": "#/$defs/ryukyokuEvent" },
+            { "$ref": "#/$defs/endGameEvent" }
+          ]
+      },
+      {
+        "type": "object",
+        "properties": {
+            "scores": { "type": "array", "minItems": 4, "maxItems": 4 },
+            "deltas": { "oneOf": [{ "type": "null" }, { "type": "array", "minItems": 4, "maxItems": 4 }] },
+            "tehais": { "type": "array", "minItems": 4, "maxItems": 4 },
+            "tenpais": { "type": "array", "minItems": 4, "maxItems": 4 },
+            "rankings": { "type": "array", "minItems": 4, "maxItems": 4 }
+          }
+        }
+      ]
+    },
+    "event3p": {
+      "allOf": [
+        {
+          "oneOf": [
+            { "$ref": "#/$defs/startGame3p" },
+            { "$ref": "#/$defs/startKyoku3p" },
+            { "$ref": "#/$defs/turnEvent" },
+            { "$ref": "#/$defs/callEvent" },
+            { "$ref": "#/$defs/simpleEvent" },
+            { "$ref": "#/$defs/horaEvent" },
+            { "$ref": "#/$defs/ryukyokuEvent" },
+            { "$ref": "#/$defs/endGameEvent" },
+            { "$ref": "#/$defs/kitaEvent" }
+          ]
+      },
+      {
+        "type": "object",
+        "not": {
+          "type": "object",
+          "required": ["type"],
+            "properties": { "type": { "const": "chi" } }
+          }
+      },
+      {
+        "type": "object",
+        "properties": {
+            "actor": { "type": "integer", "minimum": 0, "maximum": 2 },
+            "target": { "type": "integer", "minimum": 0, "maximum": 2 },
+            "scores": { "type": "array", "minItems": 3, "maxItems": 3 },
+            "deltas": { "oneOf": [{ "type": "null" }, { "type": "array", "minItems": 3, "maxItems": 3 }] },
+            "tehais": { "type": "array", "minItems": 3, "maxItems": 3 },
+            "tenpais": { "type": "array", "minItems": 3, "maxItems": 3 },
+            "rankings": { "type": "array", "minItems": 3, "maxItems": 3 }
+          }
+        }
+      ]
+    },
+    "state4p": {
+      "type": "object",
+      "required": ["schema", "rule_line", "viewer_seat", "source", "from_seq", "to_seq", "events"],
+      "properties": {
+        "schema": { "const": "flya-mahjong-events-v2" },
+        "rule_line": { "const": "riichi4p" },
+        "rule_profile": { "type": "string" },
+        "viewer_seat": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "source": { "$ref": "#/$defs/source" },
+        "from_seq": { "const": 0 },
+        "to_seq": { "type": "integer", "minimum": 0 },
+        "events": { "type": "array", "items": { "$ref": "#/$defs/event4p" } },
+        "state_digest": { "type": "string", "pattern": "^fnv1a64:[0-9a-f]{16}$" }
+      },
+      "additionalProperties": false
+    },
+    "state3p": {
+      "type": "object",
+      "required": ["schema", "rule_line", "viewer_seat", "source", "from_seq", "to_seq", "events"],
+      "properties": {
+        "schema": { "const": "flya-mahjong-events-v2" },
+        "rule_line": { "const": "riichi3p" },
+        "rule_profile": { "type": "string" },
+        "viewer_seat": { "type": "integer", "minimum": 0, "maximum": 2 },
+        "source": { "$ref": "#/$defs/source" },
+        "from_seq": { "const": 0 },
+        "to_seq": { "type": "integer", "minimum": 0 },
+        "events": { "type": "array", "items": { "$ref": "#/$defs/event3p" } },
+        "state_digest": { "type": "string", "pattern": "^fnv1a64:[0-9a-f]{16}$" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

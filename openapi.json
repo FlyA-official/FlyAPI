@@ -1,0 +1,342 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FlyA Test API",
+    "version": "1.0.0-beta",
+    "description": "Platform-independent Test API. Clients submit a complete seat-observed standard event stream; FlyAPI reconstructs state and legal actions."
+  },
+  "servers": [{ "url": "https://api.nashout.com" }],
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/beta/v1/models": {
+      "get": {
+        "operationId": "listModels",
+        "summary": "List models available to the current key",
+        "responses": {
+          "200": {
+            "description": "Model catalog",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/modelsResponse" } } }
+          },
+          "401": { "$ref": "#/components/responses/errorResponse" }
+        }
+      }
+    },
+    "/beta/v1/quota": {
+      "get": {
+        "operationId": "getQuota",
+        "summary": "Activate a frozen key and read its quota",
+        "responses": {
+          "200": {
+            "description": "PAYGO or subscription quota",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/quotaResponse" } } }
+          },
+          "401": { "$ref": "#/components/responses/errorResponse" }
+        }
+      }
+    },
+    "/beta/v1/decision": {
+      "post": {
+        "operationId": "createDecision",
+        "summary": "Request a model decision from a complete observed event history",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/decisionRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Runtime attempt completed as success, failure, timeout, or abstain",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/decisionResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/errorResponse" },
+          "401": { "$ref": "#/components/responses/errorResponse" },
+          "402": { "$ref": "#/components/responses/errorResponse" },
+          "403": { "$ref": "#/components/responses/errorResponse" },
+          "404": { "$ref": "#/components/responses/errorResponse" },
+          "409": { "$ref": "#/components/responses/errorResponse" },
+          "422": { "$ref": "#/components/responses/errorResponse" },
+          "503": { "$ref": "#/components/responses/errorResponse" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "flyat_ key" }
+    },
+    "responses": {
+      "errorResponse": {
+        "description": "Pre-runtime error; not charged",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/error" } } }
+      }
+    },
+    "schemas": {
+    "error": {
+      "type": "object",
+      "required": ["error", "message"],
+      "properties": {
+        "error": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "model": {
+      "type": "object",
+      "required": ["model_id", "display_name", "rule_line", "provider", "multiplier", "cost_milliunits", "is_default", "available", "unavailable_reason"],
+      "properties": {
+        "model_id": { "type": "string" },
+        "display_name": { "type": "string" },
+        "rule_line": { "enum": ["riichi4p", "riichi3p"] },
+        "provider": { "type": "string" },
+        "multiplier": { "type": "string", "pattern": "^-?[0-9]+\\.[0-9]+$" },
+        "cost_milliunits": { "type": "integer", "minimum": 0 },
+        "is_default": { "type": "boolean" },
+        "available": { "type": "boolean" },
+        "unavailable_reason": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "modelsResponse": {
+      "type": "object",
+      "required": ["models"],
+      "properties": { "models": { "type": "array", "items": { "$ref": "#/components/schemas/model" } } },
+      "additionalProperties": false
+    },
+    "windowQuota": {
+      "type": "object",
+      "required": ["limit", "used", "remaining", "resets_at"],
+      "properties": {
+        "limit": { "type": "string" },
+        "used": { "type": "string" },
+        "remaining": { "type": "string" },
+        "resets_at": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "quotaCommon": {
+      "type": "object",
+      "required": ["key", "status", "key_kind", "validity_months", "activated_at", "consumed", "replay", "expires_at", "expires_in_seconds", "destroy_at", "destroy_in_seconds"],
+      "properties": {
+        "key": { "type": "string" },
+        "status": { "enum": ["frozen", "active", "grace"] },
+        "key_kind": { "enum": ["paygo", "subscription"] },
+        "validity_months": { "type": "integer", "minimum": 1 },
+        "activated_now": { "type": "boolean" },
+        "activated_at": { "type": ["string", "null"], "format": "date-time" },
+        "consumed": { "type": "string" },
+        "replay": { "type": "boolean" },
+        "expires_at": { "type": ["string", "null"], "format": "date-time" },
+        "expires_in_seconds": { "type": ["integer", "null"], "minimum": 0 },
+        "destroy_at": { "type": ["string", "null"], "format": "date-time" },
+        "destroy_in_seconds": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "paygoQuota": {
+      "allOf": [
+        { "$ref": "#/components/schemas/quotaCommon" },
+        {
+          "type": "object",
+          "required": ["quota_total", "quota_used", "quota_remaining"],
+          "properties": {
+            "key_kind": { "const": "paygo" },
+            "quota_total": { "type": "string" },
+            "quota_used": { "type": "string" },
+            "quota_remaining": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "subscriptionQuota": {
+      "allOf": [
+        { "$ref": "#/components/schemas/quotaCommon" },
+        {
+          "type": "object",
+          "required": ["subscription_type", "five_hour", "weekly"],
+          "properties": {
+            "key_kind": { "const": "subscription" },
+            "subscription_type": { "type": "string" },
+            "five_hour": { "$ref": "#/components/schemas/windowQuota" },
+            "weekly": { "$ref": "#/components/schemas/windowQuota" }
+          }
+        }
+      ]
+    },
+    "quotaResponse": { "oneOf": [{ "$ref": "#/components/schemas/paygoQuota" }, { "$ref": "#/components/schemas/subscriptionQuota" }] },
+    "decisionRequest": {
+      "type": "object",
+      "required": ["request_id", "state"],
+      "properties": {
+        "request_id": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9._:-]+$" },
+        "session_id": { "type": "string", "minLength": 8, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]+$" },
+        "model_id": { "type": "string" },
+        "state": { "$ref": "./schemas/flya-mahjong-events-v2.schema.json" },
+        "match_context": {
+          "type": "object",
+          "properties": { "length": { "enum": ["single", "east", "half"] } },
+          "additionalProperties": false
+        },
+        "deadline_ms": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "tile": { "type": "string", "pattern": "^(?:[1-9][mps]|5[mps]r|[ESWNPFC])$" },
+    "discardAction": {
+      "type": "object",
+      "required": ["type", "pai", "tsumogiri"],
+      "properties": {
+        "type": { "enum": ["dahai", "riichi_dahai"] },
+        "pai": { "$ref": "#/components/schemas/tile" },
+        "tsumogiri": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "dealerOpeningAction": {
+      "type": "object",
+      "required": ["type", "pai"],
+      "properties": {
+        "type": { "enum": ["dealer_opening_dahai", "dealer_opening_riichi_dahai"] },
+        "pai": { "$ref": "#/components/schemas/tile" }
+      },
+      "additionalProperties": false
+    },
+    "call2Action": {
+      "type": "object",
+      "required": ["type", "pai", "consumed"],
+      "properties": {
+        "type": { "enum": ["chi", "pon"] },
+        "pai": { "$ref": "#/components/schemas/tile" },
+        "consumed": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/components/schemas/tile" } }
+      },
+      "additionalProperties": false
+    },
+    "kanAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "pai", "consumed"],
+          "properties": {
+            "type": { "enum": ["daiminkan", "kakan"] },
+            "pai": { "$ref": "#/components/schemas/tile" },
+            "consumed": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/components/schemas/tile" } }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "pai", "consumed"],
+          "properties": {
+            "type": { "const": "ankan" },
+            "pai": { "$ref": "#/components/schemas/tile" },
+            "consumed": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "$ref": "#/components/schemas/tile" } }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "winAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": { "type": { "const": "tsumo" }, "pai": { "$ref": "#/components/schemas/tile" } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "target"],
+          "properties": {
+            "type": { "const": "ron" },
+            "pai": { "$ref": "#/components/schemas/tile" },
+            "target": { "type": "integer", "minimum": 0, "maximum": 3 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "simpleAction": {
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "enum": ["kita", "kyushukyuhai", "pass_all"] } },
+      "additionalProperties": false
+    },
+    "action": {
+      "oneOf": [
+        { "$ref": "#/components/schemas/discardAction" },
+        { "$ref": "#/components/schemas/dealerOpeningAction" },
+        { "$ref": "#/components/schemas/call2Action" },
+        { "$ref": "#/components/schemas/kanAction" },
+        { "$ref": "#/components/schemas/winAction" },
+        { "$ref": "#/components/schemas/simpleAction" }
+      ]
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["action_id", "action", "probability"],
+      "properties": {
+        "action_id": { "type": "integer", "minimum": 0 },
+        "action": { "$ref": "#/components/schemas/action" },
+        "probability": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "successAttempt": {
+      "type": "object",
+      "required": ["model_id", "model_selection", "status", "selected_action_id", "selected_index", "action", "actions", "latency_ms"],
+      "properties": {
+        "model_id": { "type": "string" },
+        "model_selection": { "enum": ["server_default", "explicit"] },
+        "status": { "const": "success" },
+        "selected_action_id": { "type": "integer", "minimum": 0 },
+        "selected_index": { "type": "integer", "minimum": 0 },
+        "action": { "$ref": "#/components/schemas/action" },
+        "actions": { "type": "array", "minItems": 1, "items": { "$ref": "#/components/schemas/candidate" } },
+        "latency_ms": { "type": "integer", "minimum": 0, "maximum": 120000 }
+      },
+      "additionalProperties": false
+    },
+    "failedAttempt": {
+      "type": "object",
+      "required": ["model_id", "status", "error", "latency_ms"],
+      "properties": {
+        "model_id": { "type": "string" },
+        "model_selection": { "enum": ["server_default", "explicit"] },
+        "status": { "enum": ["failure", "timeout"] },
+        "error": { "$ref": "#/components/schemas/error" },
+        "latency_ms": { "type": "integer", "minimum": 0, "maximum": 120000 }
+      },
+      "additionalProperties": false
+    },
+    "abstainAttempt": {
+      "type": "object",
+      "required": ["model_id", "status", "latency_ms"],
+      "properties": {
+        "model_id": { "type": "string" },
+        "model_selection": { "enum": ["server_default", "explicit"] },
+        "status": { "const": "abstain" },
+        "latency_ms": { "type": "integer", "minimum": 0, "maximum": 120000 }
+      },
+      "additionalProperties": false
+    },
+    "decisionResponse": {
+      "type": "object",
+      "required": ["protocol", "request_id", "model_id", "model_selection", "attempt", "quota"],
+      "properties": {
+        "protocol": { "const": "flya-test-api-v1" },
+        "request_id": { "type": "string" },
+        "model_id": { "type": "string" },
+        "model_selection": { "enum": ["server_default", "explicit"] },
+        "rule_line": { "enum": ["riichi4p", "riichi3p"] },
+        "rule_profile": { "type": "string" },
+        "match_context": {
+          "type": "object",
+          "required": ["length"],
+          "properties": { "length": { "enum": ["unknown", "single", "east", "half"] } },
+          "additionalProperties": false
+        },
+        "attempt": { "oneOf": [{ "$ref": "#/components/schemas/successAttempt" }, { "$ref": "#/components/schemas/failedAttempt" }, { "$ref": "#/components/schemas/abstainAttempt" }] },
+        "quota": { "$ref": "#/components/schemas/quotaResponse" }
+      },
+      "additionalProperties": false
+    }
+    }
+  }
+}

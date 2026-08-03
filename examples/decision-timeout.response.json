@@ -1,0 +1,35 @@
+{
+  "protocol": "flya-test-api-v1",
+  "request_id": "example-runtime-timeout-0001",
+  "model_id": "flya-manout-1-3p",
+  "model_selection": "server_default",
+  "rule_line": "riichi3p",
+  "rule_profile": "tenhou",
+  "match_context": { "length": "unknown" },
+  "attempt": {
+    "model_id": "flya-manout-1-3p",
+    "model_selection": "server_default",
+    "status": "timeout",
+    "error": {
+      "code": "runtime_timeout",
+      "message": "runtime request timed out"
+    },
+    "latency_ms": 8000
+  },
+  "quota": {
+    "key": "flyat_abcdef...1234",
+    "status": "active",
+    "key_kind": "paygo",
+    "validity_months": 1,
+    "activated_at": "2026-08-03T00:00:00Z",
+    "consumed": "1.500",
+    "replay": false,
+    "expires_at": "2026-09-03T00:00:00Z",
+    "expires_in_seconds": 2678400,
+    "destroy_at": null,
+    "destroy_in_seconds": null,
+    "quota_total": "10000.000",
+    "quota_used": "1.500",
+    "quota_remaining": "9998.500"
+  }
+}

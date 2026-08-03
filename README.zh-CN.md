@@ -9,6 +9,8 @@
 | API 前缀 | `/beta/v1` |
 | 协议标识 | `flya-test-api-v1` |
 
+机器可读契约：[OpenAPI 3.1](openapi.json) · [事件 JSON Schema](schemas/flya-mahjong-events-v2.schema.json) · [标准请求与响应夹具](examples/)
+
 ## 1. 认证与平台边界
 
 所有请求必须携带：
@@ -20,7 +22,9 @@ Content-Type: application/json
 
 Key 以 `flyat_` 开头。客户端应保持 TLS 证书校验开启，不得把 Key 放进网页前端、URL、日志或代码仓库。该接口故意不开放浏览器 CORS。
 
-FlyAPI 与游戏平台无关，不接收、不识别也不限制雀魂、天凤、一番街、天月或其他平台。客户端 Bridge 只需把平台原生协议转换成本文定义的 `flya-mahjong-events-v1` observed 标准事件流；请求中不发送平台名。
+FlyAPI 只接收与平台无关的 `flya-mahjong-events-v2` observed 标准事件流。把任何游戏、牌谱或客户端协议转换成该标准输入，是接入方自己的职责，不属于本仓库范围；请求中不要发送平台名。
+
+客户端不需要 FlyTable 的包或源码，只需实现本文 JSON 契约并发送完整标准事件历史。
 
 服务端负责重建场况并计算全部合法动作。客户端不得发送 `legal_actions`、`legal_digest`、牌山、隐藏手牌、tensor、mask、obs 或其他模型私有输入。
 
@@ -151,23 +155,13 @@ Authorization: Bearer <FLYAT_KEY>
 Content-Type: application/json
 ```
 
-```json
-{
-  "request_id": "client-table-42-turn-17",
-  "session_id": "client-table-42",
-  "model_id": "flya-manplus-1",
-  "state": {
-    "schema": "flya-mahjong-events-v1",
-    "rule_line": "riichi4p",
-    "viewer_seat": 0,
-    "source": { "kind": "observed" },
-    "from_seq": 0,
-    "to_seq": 3,
-    "events": [],
-    "state_digest": "fnv1a64:0000000000000000"
-  },
-  "deadline_ms": 8000
-}
+完整、可重放的请求见 [examples/decision-4p-discard.request.json](examples/decision-4p-discard.request.json)：
+
+```bash
+curl -X POST https://api.nashout.com/beta/v1/decision \
+  -H "Authorization: Bearer $FLYAT_KEY" \
+  -H "Content-Type: application/json" \
+  --data-binary @examples/decision-4p-discard.request.json
 ```
 
 ### 顶层字段
@@ -177,7 +171,8 @@ Content-Type: application/json
 | `request_id` | 是 | 当前 Key 内唯一的幂等 ID；1–200 字符，只允许 `A-Z a-z 0-9 . _ : -` |
 | `session_id` | 否 | 同一局稳定 ID；8–128 字符，字符集相同。仅用于连续性与受限续局透支 |
 | `model_id` | 否 | 省略时使用该规则线的服务器默认模型；显式指定时必须来自 `/models` 且可用 |
-| `state` | 是 | 完整的 `flya-mahjong-events-v1` 本席可见场况信封 |
+| `state` | 是 | 完整的 `flya-mahjong-events-v2` 本席可见场况信封 |
+| `match_context` | 否 | 可选对局长度元数据：`{"length":"single|east|half"}`；省略表示 `unknown` |
 | `deadline_ms` | 否 | 正整数；默认及最大实际等待均为 30000 ms |
 
 未知顶层字段会被拒绝。响应中的 `model_selection` 为 `server_default` 或 `explicit`。
@@ -186,16 +181,17 @@ Content-Type: application/json
 
 | 字段 | 规则 |
 | --- | --- |
-| `schema` | `flya-mahjong-events-v1` |
+| `schema` | `flya-mahjong-events-v2` |
 | `rule_line` | `riichi4p` 或 `riichi3p` |
+| `rule_profile` | 可选；通常省略并使用服务器默认规则 |
 | `viewer_seat` | 四麻为 `0..3`，三麻为 `0..2` |
 | `source.kind` | 必须为 `observed`；`authoritative` 会被拒绝 |
 | `from_seq` | 必须为 `0`；每次请求都包含从开局开始的完整历史 |
 | `to_seq` | 必须等于 `events.length` |
 | `events` | 按时间顺序排列的本席可见 canonical MJAI 事件 |
-| `state_digest` | FlyTable 对 `events` 计算的稳定摘要 |
+| `state_digest` | 可选；省略时由服务器计算，提供时必须与 `events` 匹配 |
 
-服务端校验完整历史与摘要，从最近的 `start_kyoku` 重放当前局，确认当前确实需要决策，并生成唯一合法动作表。若 observed 流省略了对手庄家的隐藏第 14 张起手牌，服务端会在内部补未知牌；客户端不要自行推导。
+服务端校验完整历史并计算摘要，从最近的 `start_kyoku` 重放当前局，确认当前确实需要决策，并生成唯一合法动作表。若 observed 流省略了对手庄家的隐藏第 14 张起手牌，服务端会在内部补未知牌；客户端不要自行推导。
 
 隐私要求：
 
@@ -204,15 +200,35 @@ Content-Type: application/json
 - `scores`、`deltas`、`tehais` 的席位宽度必须与规则线一致。
 - 不得发送牌山、其他玩家真实手牌、authoritative seed、obs、tensor、mask 或模型私有特征。
 
-不要根据任意 JSON 文本计算摘要。摘要是 FNV-1a 64，输入为 FlyTable 类型化序列化后的紧凑 UTF-8 JSON。Rust 客户端应直接调用：
+### 标准事件对象
 
-```rust
-use flytable_protocol::compute_state_digest;
+机器可读的权威定义是[事件 JSON Schema](schemas/flya-mahjong-events-v2.schema.json)。下表列出全部可接受的事实事件；未知事件和未知字段均会被拒绝。
 
-let state_digest = compute_state_digest(&events);
-```
+| `type` | 必需标准字段 | 规则线 |
+| --- | --- | --- |
+| `start_game` | `names`；observed `seed` 省略或为 `null`；可选 `id` | 四麻/三麻 |
+| `start_kyoku` | `bakaze`、`dora_marker`、`kyoku`、`honba`、`kyotaku`、`oya`、`scores`、`tehais` | 四麻/三麻 |
+| `tsumo` | `actor`、`pai` | 四麻/三麻 |
+| `dealer_opening` | `actor`、`pai` | 四麻/三麻，v2 |
+| `dahai` | `actor`、`pai`、`tsumogiri` | 四麻/三麻 |
+| `dealer_opening_dahai` | `actor`、`pai` | 四麻/三麻，v2 |
+| `chi` | `actor`、`target`、`pai`、两张 `consumed` | 仅四麻 |
+| `pon` | `actor`、`target`、`pai`、两张 `consumed` | 四麻/三麻 |
+| `daiminkan` | `actor`、`target`、`pai`、三张 `consumed` | 四麻/三麻 |
+| `kakan` | `actor`、`pai`、三张 `consumed` | 四麻/三麻 |
+| `ankan` | `actor`、四张 `consumed` | 四麻/三麻 |
+| `kita` | `actor`、`pai`（`N`） | 仅三麻 |
+| `dora` | `dora_marker` | 四麻/三麻 |
+| `reach` | `actor` | 四麻/三麻 |
+| `reach_accepted` | `actor`；可选 `scores`、`deltas` | 四麻/三麻 |
+| `hora` | `actor`、`target`；Schema 定义的可选结算和详情字段 | 四麻/三麻 |
+| `ryukyoku` | 可选 `deltas`、`reason`、`tenpais`、`tehais`、`scores` | 四麻/三麻 |
+| `end_kyoku` | 无其他字段 | 四麻/三麻 |
+| `end_game` | 可选 `scores`、`rankings` | 四麻/三麻 |
 
-其他语言必须复现相同字段顺序和 canonical 序列化，并用已知正确的 FlyTable 夹具验证实现。
+新接入无需提交 `state_digest`。兼容实现可以按 FlyA 紧凑 canonical 事件数组 JSON 计算 FNV-1a 64；发送前必须通过 [examples/state-digest-vectors.json](examples/state-digest-vectors.json) 验证。
+
+可运行夹具覆盖[四麻切牌](examples/decision-4p-discard.request.json)、[四麻吃牌响应窗口](examples/decision-4p-chi.request.json)和[三麻拔北回合](examples/decision-3p-kita.request.json)。响应夹具覆盖[成功](examples/decision-success.response.json)、[失败](examples/decision-failure.response.json)、[超时](examples/decision-timeout.response.json)、[放弃执行](examples/decision-abstain.response.json)以及[运行前错误](examples/pre-runtime-error.response.json)。
 
 ## 6. 公开动作形式
 
@@ -367,5 +383,7 @@ JSON 类型错误、缺少必填字段或未知字段，可能由 HTTP JSON 提�
 ## 11. 版本规则
 
 当前 URL 主版本为 `/beta/v1`，成功响应协议为 `flya-test-api-v1`。
+
+新接入应使用 `flya-mahjong-events-v2`。冻结的 v1 事件信封仅在不使用 v2 庄家起手事件时继续兼容。
 
 v1 内只做向后兼容的加性扩展。删除字段，或改变字段语义、认证方式、计费或幂等语义时，必须使用新的 URL 主版本。

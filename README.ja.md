@@ -9,6 +9,8 @@
 | API プレフィックス | `/beta/v1` |
 | プロトコル | `flya-test-api-v1` |
 
+機械可読契約：[OpenAPI 3.1](openapi.json) · [イベント JSON Schema](schemas/flya-mahjong-events-v2.schema.json) · [標準リクエスト／レスポンス fixture](examples/)
+
 ## 1. 認証とプラットフォーム境界
 
 すべてのリクエストに次のヘッダーが必要です。
@@ -20,7 +22,9 @@ Content-Type: application/json
 
 Key は `flyat_` で始まります。TLS 証明書の検証を有効にしたまま使用してください。Key をブラウザ側コード、URL、ログ、ソースリポジトリに保存してはいけません。ブラウザ CORS は意図的に提供していません。
 
-FlyAPI はゲームプラットフォームに依存しません。雀魂、天鳳、麻雀一番街、天月、その他のプラットフォーム名を受信・識別・制限しません。クライアント Bridge が各プラットフォームのプロトコルを、本文で定義する `flya-mahjong-events-v1` の observed 標準イベントストリームへ変換します。リクエストにプラットフォーム名を含めないでください。
+FlyAPI が受け取るのは、プラットフォーム非依存の `flya-mahjong-events-v2` observed 標準イベントストリームだけです。ゲーム、牌譜、クライアント固有のプロトコルをこの標準入力へ変換する処理は統合側の責任であり、本リポジトリの範囲外です。リクエストにプラットフォーム名を含めないでください。
+
+クライアントに FlyTable のパッケージやソースコードは不要です。本 JSON 契約を実装し、完全な標準イベント履歴を送信してください。
 
 局面の復元と合法手の計算はサーバーが行います。クライアントは `legal_actions`、`legal_digest`、牌山、他家の非公開手牌、tensor、mask、obs、その他のモデル内部入力を送信してはいけません。
 
@@ -151,23 +155,13 @@ Authorization: Bearer <FLYAT_KEY>
 Content-Type: application/json
 ```
 
-```json
-{
-  "request_id": "client-table-42-turn-17",
-  "session_id": "client-table-42",
-  "model_id": "flya-manplus-1",
-  "state": {
-    "schema": "flya-mahjong-events-v1",
-    "rule_line": "riichi4p",
-    "viewer_seat": 0,
-    "source": { "kind": "observed" },
-    "from_seq": 0,
-    "to_seq": 3,
-    "events": [],
-    "state_digest": "fnv1a64:0000000000000000"
-  },
-  "deadline_ms": 8000
-}
+完全で再生可能なリクエストは [examples/decision-4p-discard.request.json](examples/decision-4p-discard.request.json) にあります。
+
+```bash
+curl -X POST https://api.nashout.com/beta/v1/decision \
+  -H "Authorization: Bearer $FLYAT_KEY" \
+  -H "Content-Type: application/json" \
+  --data-binary @examples/decision-4p-discard.request.json
 ```
 
 ### トップレベルフィールド
@@ -177,7 +171,8 @@ Content-Type: application/json
 | `request_id` | はい | Key 内で一意な冪等 ID。1～200 文字、`A-Z a-z 0-9 . _ : -` のみ |
 | `session_id` | いいえ | 同一対局で安定した ID。8～128 文字、同じ文字セット。連続性と制限付き継続クレジットにのみ使用 |
 | `model_id` | いいえ | 省略時はルールラインのサーバーデフォルト。指定時は `/models` の利用可能な ID |
-| `state` | はい | 完全な `flya-mahjong-events-v1` 自家可視状態エンベロープ |
+| `state` | はい | 完全な `flya-mahjong-events-v2` 自家可視状態エンベロープ |
+| `match_context` | いいえ | 任意の対局長メタデータ：`{"length":"single|east|half"}`。省略時は `unknown` |
 | `deadline_ms` | いいえ | 正の整数。デフォルトおよび実効上限は 30000 ms |
 
 未知のトップレベルフィールドは拒否されます。レスポンスの `model_selection` は `server_default` または `explicit` です。
@@ -186,16 +181,17 @@ Content-Type: application/json
 
 | フィールド | ルール |
 | --- | --- |
-| `schema` | `flya-mahjong-events-v1` |
+| `schema` | `flya-mahjong-events-v2` |
 | `rule_line` | `riichi4p` または `riichi3p` |
+| `rule_profile` | 任意。通常は省略し、サーバー既定のルールを使用 |
 | `viewer_seat` | 四麻は `0..3`、三麻は `0..2` |
 | `source.kind` | `observed` 必須。`authoritative` は拒否 |
 | `from_seq` | `0` 必須。各リクエストはゲーム開始からの完全な履歴を含む |
 | `to_seq` | `events.length` と一致 |
 | `events` | 時系列順の、自家から見える canonical MJAI イベント |
-| `state_digest` | FlyTable が `events` から計算する安定ダイジェスト |
+| `state_digest` | 任意。省略時はサーバーが計算し、指定時は `events` と一致する必要あり |
 
-サーバーは完全な履歴とダイジェストを検証し、最新の `start_kyoku` から現在局を再生し、判断が必要な局面であることを確認して唯一の合法手テーブルを生成します。observed ストリームで他家の親の配牌 14 枚目が省略される場合、サーバーが内部で不明牌を補完します。クライアント側で推測しないでください。
+サーバーは完全な履歴を検証してダイジェストを計算し、最新の `start_kyoku` から現在局を再生し、判断が必要な局面であることを確認して唯一の合法手テーブルを生成します。observed ストリームで他家の親の配牌 14 枚目が省略される場合、サーバーが内部で不明牌を補完します。クライアント側で推測しないでください。
 
 プライバシー要件：
 
@@ -204,15 +200,35 @@ Content-Type: application/json
 - `scores`、`deltas`、`tehais` の席数はルールラインと一致させます。
 - 牌山、他家の実手牌、authoritative seed、obs、tensor、mask、モデル内部特徴を送信してはいけません。
 
-任意の JSON 文字列からダイジェストを計算しないでください。ダイジェストは、FlyTable の型付きシリアライズ後に出力されるコンパクト UTF-8 JSON に対する FNV-1a 64 です。Rust クライアントでは次を使用します。
+### 標準イベントオブジェクト
 
-```rust
-use flytable_protocol::compute_state_digest;
+機械可読の正本は[イベント JSON Schema](schemas/flya-mahjong-events-v2.schema.json)です。次の表は受理される全 fact-event を示します。未知のイベント型と未知のフィールドは拒否されます。
 
-let state_digest = compute_state_digest(&events);
-```
+| `type` | 必須標準フィールド | ルールライン |
+| --- | --- | --- |
+| `start_game` | `names`。observed の `seed` は省略または `null`。`id` は任意 | 4P/3P |
+| `start_kyoku` | `bakaze`, `dora_marker`, `kyoku`, `honba`, `kyotaku`, `oya`, `scores`, `tehais` | 4P/3P |
+| `tsumo` | `actor`, `pai` | 4P/3P |
+| `dealer_opening` | `actor`, `pai` | 4P/3P、v2 |
+| `dahai` | `actor`, `pai`, `tsumogiri` | 4P/3P |
+| `dealer_opening_dahai` | `actor`, `pai` | 4P/3P、v2 |
+| `chi` | `actor`, `target`, `pai`, 2 枚の `consumed` | 4P のみ |
+| `pon` | `actor`, `target`, `pai`, 2 枚の `consumed` | 4P/3P |
+| `daiminkan` | `actor`, `target`, `pai`, 3 枚の `consumed` | 4P/3P |
+| `kakan` | `actor`, `pai`, 3 枚の `consumed` | 4P/3P |
+| `ankan` | `actor`, 4 枚の `consumed` | 4P/3P |
+| `kita` | `actor`, `pai` (`N`) | 3P のみ |
+| `dora` | `dora_marker` | 4P/3P |
+| `reach` | `actor` | 4P/3P |
+| `reach_accepted` | `actor`。`scores`, `deltas` は任意 | 4P/3P |
+| `hora` | `actor`, `target`。Schema 所定の精算／詳細フィールドは任意 | 4P/3P |
+| `ryukyoku` | `deltas`, `reason`, `tenpais`, `tehais`, `scores` は任意 | 4P/3P |
+| `end_kyoku` | 追加フィールドなし | 4P/3P |
+| `end_game` | `scores`, `rankings` は任意 | 4P/3P |
 
-その他の言語は同じフィールド順序と canonical シリアライズを再現し、正しい FlyTable フィクスチャで実装を検証してください。
+新規統合で `state_digest` を送る必要はありません。互換実装では FlyA の compact canonical イベント配列 JSON に対する FNV-1a 64 を指定できますが、送信前に [examples/state-digest-vectors.json](examples/state-digest-vectors.json) で検証してください。
+
+実行可能 fixture は [4P 打牌](examples/decision-4p-discard.request.json)、[4P チー応答ウィンドウ](examples/decision-4p-chi.request.json)、[3P 北抜きターン](examples/decision-3p-kita.request.json)を含みます。レスポンス fixture は[成功](examples/decision-success.response.json)、[失敗](examples/decision-failure.response.json)、[タイムアウト](examples/decision-timeout.response.json)、[abstain](examples/decision-abstain.response.json)、[ランタイム前エラー](examples/pre-runtime-error.response.json)を含みます。
 
 ## 6. 公開アクション形式
 
@@ -367,5 +383,7 @@ JSON 型エラー、必須フィールド欠落、未知フィールドは HTTP 
 ## 11. バージョニング
 
 現在の URL メジャーバージョンは `/beta/v1`、成功レスポンスのプロトコルは `flya-test-api-v1` です。
+
+新規統合では `flya-mahjong-events-v2` を使用してください。凍結済み v1 イベントエンベロープは、v2 の dealer-opening イベントを使わない場合に限り引き続き受理されます。
 
 v1 内の変更は追加的かつ後方互換です。フィールド削除、フィールド意味、認証、課金、冪等性の変更には、新しい URL メジャーバージョンが必要です。

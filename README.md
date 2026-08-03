@@ -9,6 +9,8 @@
 | API prefix | `/beta/v1` |
 | Protocol | `flya-test-api-v1` |
 
+Machine-readable contracts: [OpenAPI 3.1](openapi.json) · [event JSON Schema](schemas/flya-mahjong-events-v2.schema.json) · [standard request and response fixtures](examples/)
+
 ## 1. Authentication and platform boundary
 
 Every request requires:
@@ -20,7 +22,9 @@ Content-Type: application/json
 
 Keys begin with `flyat_`. Keep TLS certificate verification enabled. Never put a key in browser code, a URL, logs, or a source repository. Browser CORS is intentionally unavailable.
 
-FlyAPI is platform-independent. It does not accept, identify, or restrict Mahjong Soul, Tenhou, Riichi City, Amatsuki, or any other game platform. The client bridge converts the platform protocol into the `flya-mahjong-events-v1` observed event stream described below. Do not send a platform name.
+FlyAPI accepts only the platform-independent `flya-mahjong-events-v2` observed event stream. Converting any game, log, or client protocol into this standard input is the integrator's responsibility and is outside this repository. Do not send a platform name.
+
+No FlyTable package or source code is required on the client. Implement the JSON contract and send a complete standard event history.
 
 The server reconstructs the game state and computes all legal actions. Clients must not send `legal_actions`, `legal_digest`, wall data, hidden hands, tensors, masks, observations, or other model-private inputs.
 
@@ -151,23 +155,13 @@ Authorization: Bearer <FLYAT_KEY>
 Content-Type: application/json
 ```
 
-```json
-{
-  "request_id": "client-table-42-turn-17",
-  "session_id": "client-table-42",
-  "model_id": "flya-manplus-1",
-  "state": {
-    "schema": "flya-mahjong-events-v1",
-    "rule_line": "riichi4p",
-    "viewer_seat": 0,
-    "source": { "kind": "observed" },
-    "from_seq": 0,
-    "to_seq": 3,
-    "events": [],
-    "state_digest": "fnv1a64:0000000000000000"
-  },
-  "deadline_ms": 8000
-}
+A complete, replayable request is provided in [examples/decision-4p-discard.request.json](examples/decision-4p-discard.request.json):
+
+```bash
+curl -X POST https://api.nashout.com/beta/v1/decision \
+  -H "Authorization: Bearer $FLYAT_KEY" \
+  -H "Content-Type: application/json" \
+  --data-binary @examples/decision-4p-discard.request.json
 ```
 
 ### Top-level fields
@@ -177,7 +171,8 @@ Content-Type: application/json
 | `request_id` | Yes | Idempotency ID unique within the key; 1–200 characters from `A-Z a-z 0-9 . _ : -` |
 | `session_id` | No | Stable game ID; 8–128 characters from the same set. Used only for continuity and bounded continuation credit |
 | `model_id` | No | Omit to use the server default for the rule line; otherwise select an available ID from `/models` |
-| `state` | Yes | Complete `flya-mahjong-events-v1` visible-state envelope |
+| `state` | Yes | Complete `flya-mahjong-events-v2` visible-state envelope |
+| `match_context` | No | Optional match-length metadata: `{"length":"single|east|half"}`; omitted means `unknown` |
 | `deadline_ms` | No | Positive integer; default and maximum effective wait are 30000 ms |
 
 Unknown top-level fields are rejected. `model_selection` in the response is `server_default` or `explicit`.
@@ -186,16 +181,17 @@ Unknown top-level fields are rejected. `model_selection` in the response is `ser
 
 | Field | Rules |
 | --- | --- |
-| `schema` | `flya-mahjong-events-v1` |
+| `schema` | `flya-mahjong-events-v2` |
 | `rule_line` | `riichi4p` or `riichi3p` |
+| `rule_profile` | Optional; normally omit it to use the server's default rules |
 | `viewer_seat` | `0..3` for four-player; `0..2` for three-player |
 | `source.kind` | Must be `observed`; `authoritative` is rejected |
 | `from_seq` | Must be `0`; every request contains the complete history from game start |
 | `to_seq` | Must equal `events.length` |
 | `events` | Canonical MJAI events visible to the requesting seat, in time order |
-| `state_digest` | Stable FlyTable digest of `events` |
+| `state_digest` | Optional. Omit it and the server computes it; if supplied, it must match `events` |
 
-The server validates the complete history and digest, replays the current hand from its latest `start_kyoku`, verifies that a decision is required, and derives the only legal action table. If an observed stream omits an opponent dealer's hidden fourteenth starting tile, the server supplies an unknown tile internally; the client must not infer it.
+The server validates the complete history, computes its digest, replays the current hand from its latest `start_kyoku`, verifies that a decision is required, and derives the only legal action table. If an observed stream omits an opponent dealer's hidden fourteenth starting tile, the server supplies an unknown tile internally; the client must not infer it.
 
 Privacy requirements:
 
@@ -204,15 +200,35 @@ Privacy requirements:
 - Seat widths in `scores`, `deltas`, and `tehais` must match the rule line.
 - Never send wall state, another player's real hand, authoritative seeds, observations, tensors, masks, or private model features.
 
-Do not compute the digest from arbitrary JSON text. It is FNV-1a 64 over the compact UTF-8 JSON emitted by FlyTable after typed serialization. Rust clients should call:
+### Standard event objects
 
-```rust
-use flytable_protocol::compute_state_digest;
+The machine-readable authority is the [event JSON Schema](schemas/flya-mahjong-events-v2.schema.json). The following table shows every accepted fact-event type; unknown fields and event types are rejected.
 
-let state_digest = compute_state_digest(&events);
-```
+| `type` | Required standard fields | Rule line |
+| --- | --- | --- |
+| `start_game` | `names`; observed `seed` is omitted or `null`; optional `id` | 4P/3P |
+| `start_kyoku` | `bakaze`, `dora_marker`, `kyoku`, `honba`, `kyotaku`, `oya`, `scores`, `tehais` | 4P/3P |
+| `tsumo` | `actor`, `pai` | 4P/3P |
+| `dealer_opening` | `actor`, `pai` | 4P/3P, v2 |
+| `dahai` | `actor`, `pai`, `tsumogiri` | 4P/3P |
+| `dealer_opening_dahai` | `actor`, `pai` | 4P/3P, v2 |
+| `chi` | `actor`, `target`, `pai`, two-tile `consumed` | 4P only |
+| `pon` | `actor`, `target`, `pai`, two-tile `consumed` | 4P/3P |
+| `daiminkan` | `actor`, `target`, `pai`, three-tile `consumed` | 4P/3P |
+| `kakan` | `actor`, `pai`, three-tile `consumed` | 4P/3P |
+| `ankan` | `actor`, four-tile `consumed` | 4P/3P |
+| `kita` | `actor`, `pai` (`N`) | 3P only |
+| `dora` | `dora_marker` | 4P/3P |
+| `reach` | `actor` | 4P/3P |
+| `reach_accepted` | `actor`; optional `scores`, `deltas` | 4P/3P |
+| `hora` | `actor`, `target`; optional settlement/detail fields defined by the schema | 4P/3P |
+| `ryukyoku` | optional `deltas`, `reason`, `tenpais`, `tehais`, `scores` | 4P/3P |
+| `end_kyoku` | no additional fields | 4P/3P |
+| `end_game` | optional `scores`, `rankings` | 4P/3P |
 
-Other languages must reproduce the same field order and canonical serialization and verify their implementation against a known-good FlyTable fixture.
+`state_digest` is not required for new integrations. Compatibility implementations may provide it as FNV-1a 64 over FlyA's compact canonical event-array JSON; verify against [examples/state-digest-vectors.json](examples/state-digest-vectors.json) before sending it.
+
+Runnable fixtures cover a [4P discard](examples/decision-4p-discard.request.json), [4P chi response window](examples/decision-4p-chi.request.json), and [3P kita turn](examples/decision-3p-kita.request.json). Response fixtures cover [success](examples/decision-success.response.json), [failure](examples/decision-failure.response.json), [timeout](examples/decision-timeout.response.json), [abstain](examples/decision-abstain.response.json), and a [pre-runtime error](examples/pre-runtime-error.response.json).
 
 ## 6. Public action forms
 
@@ -367,5 +383,7 @@ Log only the HTTP status, stable error code, your request ID, and timestamp. Nev
 ## 11. Versioning
 
 The current URL major version is `/beta/v1`, and successful responses identify `flya-test-api-v1`.
+
+Use `flya-mahjong-events-v2` for new integrations. Frozen v1 event envelopes remain accepted only when they do not use v2 dealer-opening events.
 
 Within v1, changes are additive and backward-compatible. Removing fields or changing field meaning, authentication, billing, or idempotency semantics requires a new URL major version.

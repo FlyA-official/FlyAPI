@@ -1,0 +1,46 @@
+{
+  "request_id": "example-3p-kita-0001",
+  "session_id": "example-table-3p-0001",
+  "state": {
+    "schema": "flya-mahjong-events-v2",
+    "rule_line": "riichi3p",
+    "viewer_seat": 0,
+    "source": { "kind": "observed" },
+    "from_seq": 0,
+    "to_seq": 13,
+    "events": [
+      {
+        "type": "start_game",
+        "names": ["player", "seat-1", "seat-2"],
+        "seed": null
+      },
+      {
+        "type": "start_kyoku",
+        "bakaze": "E",
+        "dora_marker": "P",
+        "kyoku": 1,
+        "honba": 0,
+        "kyotaku": 0,
+        "oya": 1,
+        "scores": [35000, 35000, 35000],
+        "tehais": [
+          ["1m", "9m", "1p", "2p", "3p", "4p", "5p", "6p", "7p", "8p", "9p", "E", "N"],
+          ["?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?"],
+          ["?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?", "?"]
+        ]
+      },
+      { "type": "tsumo", "actor": 1, "pai": "?" },
+      { "type": "dahai", "actor": 1, "pai": "1p", "tsumogiri": false },
+      { "type": "tsumo", "actor": 2, "pai": "?" },
+      { "type": "dahai", "actor": 2, "pai": "1s", "tsumogiri": true },
+      { "type": "tsumo", "actor": 0, "pai": "1s" },
+      { "type": "dahai", "actor": 0, "pai": "1s", "tsumogiri": true },
+      { "type": "tsumo", "actor": 1, "pai": "?" },
+      { "type": "dahai", "actor": 1, "pai": "9p", "tsumogiri": false },
+      { "type": "tsumo", "actor": 2, "pai": "?" },
+      { "type": "dahai", "actor": 2, "pai": "9s", "tsumogiri": false },
+      { "type": "tsumo", "actor": 0, "pai": "2s" }
+    ]
+  },
+  "deadline_ms": 8000
+}
