@@ -313,17 +313,19 @@ After runtime execution begins, HTTP status remains `200` even if the attempt fa
 - `timeout`
 - `abstain`
 
+For a non-success attempt, `attempt.error.code` is a stable machine-readable code. Common values include `runtime_timeout`, `engine_unavailable`, `state_sync_required`, `runtime_protocol_error`, `invalid_decision`, `probability_unavailable`, `model_abstained`, and the `*_capacity_exhausted` family. Treat unknown codes as ordinary failures for forward compatibility.
+
 ## 8. Billing, continuation, and idempotency
 
-1. After structural, model, and routing validation, the server atomically charges the selected model cost before runtime execution.
-2. `success`, `failure`, `timeout`, and `abstain` consume the charge after runtime execution begins.
+1. After structural, model, and routing validation, the server atomically reserves capacity for the selected model cost before runtime execution.
+2. Only a `success` result that passes server-side legal-action validation consumes quota. `failure`, `timeout`, and `abstain` return `quota.consumed="0.000"`.
 3. Authentication errors, malformed requests, unsupported models, unavailable routes, and requests rejected before runtime do not consume quota.
 4. `request_id` is the idempotency key within one API key.
 5. Reusing the same `request_id` with the exact same body returns the original terminal result with `quota.replay=true` and `quota.consumed="0.000"`.
 6. Reusing it with a different body returns `409 idempotency_conflict`.
 7. If the identical request is still executing, the server returns `409 request_in_progress`; retry later with the exact same ID and body.
 8. At a normal quota boundary, only an established, continuous `session_id` may use bounded continuation credit to finish the current game.
-9. A network gap makes continuity unknown, not illegal. Three consecutive explicit contradictions in the same session return `400 session_state_invalid`.
+9. Session continuity is used only as evidence for continuation credit. A network gap, truncated history, or mismatch may remove overdraft eligibility, but does not make a request illegal by itself. Each submitted standard event stream must still replay to a legal state on its own.
 10. Subscription overdraft carries forward: the next five-hour or weekly window pays old debt before providing new usable quota.
 11. FlyAPI does not impose a per-key concurrency limit; total capacity and overload rejection belong to the inference provider.
 
@@ -349,7 +351,6 @@ Pre-runtime errors use a non-2xx HTTP status and this shape:
 | 400 | `state_digest_mismatch` | Event digest mismatch | No |
 | 400 | `state_replay_invalid` | Event stream cannot be replayed | No |
 | 400 | `state_replay_incomplete` | State cannot be reconstructed exactly | No |
-| 400 | `session_state_invalid` | Three consecutive explicit session contradictions | No |
 | 401 | `test_api_key_invalid` | Missing, invalid, revoked, or destroyed key | No |
 | 402 | `test_api_quota_exhausted` | PAYGO quota unavailable | No |
 | 402 | `test_api_five_hour_quota_exhausted` | Five-hour quota unavailable | No |
@@ -361,6 +362,7 @@ Pre-runtime errors use a non-2xx HTTP status and this shape:
 | 409 | `idempotency_conflict` | Same request ID, different body | No |
 | 409 | `request_in_progress` | Identical request is still executing | No |
 | 422 | `decision_not_required` | No decision is required for this seat | No |
+| 422 | `decision_window_inconsistent` | Legal actions differ across trailing announcement events | No |
 | 503 | `model_unavailable` | No model runtime is routable | No |
 | 503 | `model_policy_unavailable` | Deployment policy rejects Test API use | No |
 
@@ -386,4 +388,4 @@ The current URL major version is `/beta/v1`, and successful responses identify `
 
 Use `flya-mahjong-events-v2` for new integrations. Frozen v1 event envelopes remain accepted only when they do not use v2 dealer-opening events.
 
-Within v1, changes are additive and backward-compatible. Removing fields or changing field meaning, authentication, billing, or idempotency semantics requires a new URL major version.
+Within v1, changes are additive and backward-compatible. Removing fields, changing field meaning, authentication, or idempotency, or charging a result documented here as zero-cost requires a new URL major version.

@@ -10,6 +10,10 @@
     "model_id": "flya-hayman-1",
     "model_selection": "explicit",
     "status": "abstain",
+    "error": {
+      "code": "model_abstained",
+      "message": "model did not select an action"
+    },
     "latency_ms": 45
   },
   "quota": {
@@ -18,14 +22,14 @@
     "key_kind": "paygo",
     "validity_months": 1,
     "activated_at": "2026-08-03T00:00:00Z",
-    "consumed": "0.800",
+    "consumed": "0.000",
     "replay": false,
     "expires_at": "2026-09-03T00:00:00Z",
     "expires_in_seconds": 2678400,
     "destroy_at": null,
     "destroy_in_seconds": null,
     "quota_total": "10000.000",
-    "quota_used": "0.800",
-    "quota_remaining": "9999.200"
+    "quota_used": "0.000",
+    "quota_remaining": "10000.000"
   }
 }

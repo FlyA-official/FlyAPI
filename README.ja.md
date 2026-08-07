@@ -313,17 +313,19 @@ curl -X POST https://api.nashout.com/beta/v1/decision \
 - `timeout`
 - `abstain`
 
+成功以外の `attempt.error.code` は、機械処理向けの安定したエラーコードです。代表例は `runtime_timeout`、`engine_unavailable`、`state_sync_required`、`runtime_protocol_error`、`invalid_decision`、`probability_unavailable`、`model_abstained`、各種 `*_capacity_exhausted` です。未知のコードは通常の失敗として扱ってください。
+
 ## 8. 課金、対局継続、冪等性
 
-1. 構造、モデル、ルーティング検証後、サーバーはランタイム実行前に選択モデルのコストを原子的に課金します。
-2. ランタイム実行が始まった `success`、`failure`、`timeout`、`abstain` はすべてクォータを消費します。
+1. 構造、モデル、ルーティング検証後、サーバーはランタイム実行前に、選択モデルのコストに相当する同時実行枠を原子的に予約します。
+2. サーバー側の合法手検証を通過した `success` のみがクォータを消費します。`failure`、`timeout`、`abstain` は `quota.consumed="0.000"` を返します。
 3. 認証失敗、不正形式、非対応モデル、ルート利用不可など、ランタイム前に拒否されたリクエストは消費しません。
 4. `request_id` は同一 API Key 内の冪等キーです。
 5. 同じ ID と完全に同じ本文を再送すると、最初の終端結果を `quota.replay=true`、`quota.consumed="0.000"` で返します。
 6. 同じ ID で本文が異なる場合は `409 idempotency_conflict` です。
 7. 同一リクエストが実行中の場合は `409 request_in_progress` です。後で同じ ID と本文をそのまま再送してください。
 8. 通常クォータ到達後は、確立済みで連続した `session_id` のみが、制限付き継続クレジットで現在の対局を完了できます。
-9. ネットワーク切断によるイベント欠落は連続性不明となるだけで、不正とは見なしません。同一 session で明確な矛盾が 3 回連続すると `400 session_state_invalid` です。
+9. session の連続性は、対局継続クレジットの根拠としてのみ使われます。ネットワーク切断、履歴の切り詰め、同期ずれにより超過利用資格を失うことはありますが、それだけでリクエストが不正になることはありません。各標準イベントストリームは単独で合法な状態へ再生できる必要があります。
 10. サブスクリプションの超過分は繰り越されます。次の 5 時間または週次ウィンドウは、先に旧債を差し引いてから新しい利用可能枠を付与します。
 11. FlyAPI は Key ごとの同時実行上限を設けません。全体容量と過負荷拒否は推論サービス提供側が管理します。
 
@@ -349,7 +351,6 @@ curl -X POST https://api.nashout.com/beta/v1/decision \
 | 400 | `state_digest_mismatch` | イベントダイジェスト不一致 | なし |
 | 400 | `state_replay_invalid` | イベントストリームを再生できない | なし |
 | 400 | `state_replay_incomplete` | 状態を正確に復元できない | なし |
-| 400 | `session_state_invalid` | 同一 session で明確な矛盾が 3 回連続 | なし |
 | 401 | `test_api_key_invalid` | Key がない、無効、失効、または破棄済み | なし |
 | 402 | `test_api_quota_exhausted` | PAYGO クォータを利用できない | なし |
 | 402 | `test_api_five_hour_quota_exhausted` | 5 時間クォータを利用できない | なし |
@@ -361,6 +362,7 @@ curl -X POST https://api.nashout.com/beta/v1/decision \
 | 409 | `idempotency_conflict` | 同じ ID に異なる本文を使用 | なし |
 | 409 | `request_in_progress` | 同一リクエストが実行中 | なし |
 | 422 | `decision_not_required` | 現在は自家の判断が不要 | なし |
+| 422 | `decision_window_inconsistent` | 末尾の通知イベント前後で合法手が一致しない | なし |
 | 503 | `model_unavailable` | ルーティング可能なモデルがない | なし |
 | 503 | `model_policy_unavailable` | デプロイポリシーが Test API 利用を拒否 | なし |
 
@@ -386,4 +388,4 @@ JSON 型エラー、必須フィールド欠落、未知フィールドは HTTP 
 
 新規統合では `flya-mahjong-events-v2` を使用してください。凍結済み v1 イベントエンベロープは、v2 の dealer-opening イベントを使わない場合に限り引き続き受理されます。
 
-v1 内の変更は追加的かつ後方互換です。フィールド削除、フィールド意味、認証、課金、冪等性の変更には、新しい URL メジャーバージョンが必要です。
+v1 内の変更は追加的かつ後方互換です。フィールド削除、フィールドの意味、認証または冪等性の変更、および本書でゼロ消費と定めた結果への課金には、新しい URL メジャーバージョンが必要です。

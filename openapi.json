@@ -122,7 +122,7 @@
         "validity_months": { "type": "integer", "minimum": 1 },
         "activated_now": { "type": "boolean" },
         "activated_at": { "type": ["string", "null"], "format": "date-time" },
-        "consumed": { "type": "string" },
+        "consumed": { "type": "string", "description": "Quota consumed by this response; zero unless the attempt is a verified success" },
         "replay": { "type": "boolean" },
         "expires_at": { "type": ["string", "null"], "format": "date-time" },
         "expires_in_seconds": { "type": ["integer", "null"], "minimum": 0 },
@@ -278,6 +278,15 @@
       },
       "additionalProperties": false
     },
+    "attemptError": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
     "successAttempt": {
       "type": "object",
       "required": ["model_id", "model_selection", "status", "selected_action_id", "selected_index", "action", "actions", "latency_ms"],
@@ -300,18 +309,19 @@
         "model_id": { "type": "string" },
         "model_selection": { "enum": ["server_default", "explicit"] },
         "status": { "enum": ["failure", "timeout"] },
-        "error": { "$ref": "#/components/schemas/error" },
+        "error": { "$ref": "#/components/schemas/attemptError" },
         "latency_ms": { "type": "integer", "minimum": 0, "maximum": 120000 }
       },
       "additionalProperties": false
     },
     "abstainAttempt": {
       "type": "object",
-      "required": ["model_id", "status", "latency_ms"],
+      "required": ["model_id", "status", "error", "latency_ms"],
       "properties": {
         "model_id": { "type": "string" },
         "model_selection": { "enum": ["server_default", "explicit"] },
         "status": { "const": "abstain" },
+        "error": { "$ref": "#/components/schemas/attemptError" },
         "latency_ms": { "type": "integer", "minimum": 0, "maximum": 120000 }
       },
       "additionalProperties": false

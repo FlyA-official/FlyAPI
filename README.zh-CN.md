@@ -313,17 +313,19 @@ curl -X POST https://api.nashout.com/beta/v1/decision \
 - `timeout`
 - `abstain`
 
+非成功结果的 `attempt.error.code` 是稳定的程序化错误码。常见值包括 `runtime_timeout`、`engine_unavailable`、`state_sync_required`、`runtime_protocol_error`、`invalid_decision`、`probability_unavailable`、`model_abstained` 以及各类 `*_capacity_exhausted`。客户端应把未知错误码按普通失败兼容处理。
+
 ## 8. 计费、续局与幂等
 
-1. 结构、模型和路由校验通过后，服务端在进入运行时前原子扣除所选模型成本。
-2. 已进入运行时的 `success`、`failure`、`timeout` 和 `abstain` 都消耗本次额度。
+1. 结构、模型和路由校验通过后，服务端在进入运行时前原子预留所选模型成本对应的并发额度。
+2. 只有通过服务端合法动作校验的 `success` 结果消耗额度；`failure`、`timeout` 和 `abstain` 均返回 `quota.consumed="0.000"`。
 3. 认证失败、格式错误、模型不支持、路由不可用等在运行时前拒绝的请求不扣额度。
 4. `request_id` 是同一 API Key 内的幂等键。
 5. 相同 ID 与完全相同请求体返回首次终态结果，并带 `quota.replay=true`、`quota.consumed="0.000"`。
 6. 相同 ID 与不同请求体返回 `409 idempotency_conflict`。
 7. 相同请求仍在执行时返回 `409 request_in_progress`；稍后必须使用完全相同的 ID 和请求体重试。
 8. 达到常规限额后，只有已建立且连续的 `session_id` 才能在受限额度内打完当前一局。
-9. 网络中断造成的事件缺口只会使连续性未知，不会被视为非法；同一 session 连续三次明确矛盾才返回 `400 session_state_invalid`。
+9. session 连续性只用于判断续局信用。网络中断、历史截断或不同步可能失去透支资格，但不会单独使请求非法；每次提交的标准事件流仍须能独立重放为合法场况。
 10. 订阅透支会结转：下一个五小时或周窗口先扣旧债，再获得本周期可用额度。
 11. FlyAPI 不设置每 Key 并发上限；总容量和过载拒绝由推理服务提供方负责。
 
@@ -349,7 +351,6 @@ curl -X POST https://api.nashout.com/beta/v1/decision \
 | 400 | `state_digest_mismatch` | 事件摘要不匹配 | 否 |
 | 400 | `state_replay_invalid` | 事件流无法按规则重放 | 否 |
 | 400 | `state_replay_incomplete` | 无法精确重建场况 | 否 |
-| 400 | `session_state_invalid` | 同一 session 连续三次明确矛盾 | 否 |
 | 401 | `test_api_key_invalid` | Key 缺失、无效、已吊销或已销毁 | 否 |
 | 402 | `test_api_quota_exhausted` | 按量额度不可用 | 否 |
 | 402 | `test_api_five_hour_quota_exhausted` | 五小时额度不可用 | 否 |
@@ -361,6 +362,7 @@ curl -X POST https://api.nashout.com/beta/v1/decision \
 | 409 | `idempotency_conflict` | 相同 ID 对应了不同请求体 | 否 |
 | 409 | `request_in_progress` | 相同请求仍在执行 | 否 |
 | 422 | `decision_not_required` | 当前本席不需要决策 | 否 |
+| 422 | `decision_window_inconsistent` | 尾部公告事件前后的合法动作窗口不一致 | 否 |
 | 503 | `model_unavailable` | 当前没有可路由运行实例 | 否 |
 | 503 | `model_policy_unavailable` | 部署政策不允许测试 API 使用 | 否 |
 
@@ -386,4 +388,4 @@ JSON 类型错误、缺少必填字段或未知字段，可能由 HTTP JSON 提�
 
 新接入应使用 `flya-mahjong-events-v2`。冻结的 v1 事件信封仅在不使用 v2 庄家起手事件时继续兼容。
 
-v1 内只做向后兼容的加性扩展。删除字段，或改变字段语义、认证方式、计费或幂等语义时，必须使用新的 URL 主版本。
+v1 内只做向后兼容的加性扩展。删除字段、改变字段语义或认证/幂等方式，以及把本文声明为零扣费的结果改为收费时，必须使用新的 URL 主版本。
