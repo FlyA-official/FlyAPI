@@ -317,9 +317,9 @@ For a non-success attempt, `attempt.error.code` is a stable machine-readable cod
 
 ## 8. Billing, continuation, and idempotency
 
-1. After structural, model, and routing validation, the server atomically reserves capacity for the selected model cost before runtime execution.
-2. Only a `success` result that passes server-side legal-action validation consumes quota. `failure`, `timeout`, and `abstain` return `quota.consumed="0.000"`.
-3. Authentication errors, malformed requests, unsupported models, unavailable routes, and requests rejected before runtime do not consume quota.
+1. After structural, model, and routing validation, the server atomically reserves capacity for the selected model cost before processing the decision.
+2. Every `success` action response that passes server-side legal-action validation consumes quota at the selected model rate, including a response with only one legal action. `failure`, `timeout`, and `abstain` return `quota.consumed="0.000"`.
+3. Authentication errors, malformed requests, unsupported models, unavailable routes, and other pre-decision rejections do not consume quota.
 4. `request_id` is the idempotency key within one API key.
 5. Reusing the same `request_id` with the exact same body returns the original terminal result with `quota.replay=true` and `quota.consumed="0.000"`.
 6. Reusing it with a different body returns `409 idempotency_conflict`.
@@ -328,6 +328,8 @@ For a non-success attempt, `attempt.error.code` is a stable machine-readable cod
 9. Session continuity is used only as evidence for continuation credit. A network gap, truncated history, or mismatch may remove overdraft eligibility, but does not make a request illegal by itself. Each submitted standard event stream must still replay to a legal state on its own.
 10. Subscription overdraft carries forward: the next five-hour or weekly window pays old debt before providing new usable quota.
 11. FlyAPI does not impose a per-key concurrency limit; total capacity and overload rejection belong to the inference provider.
+
+Do not call `/decision` when the game platform has already resolved the action or the client knows no choice is required. If such a request returns `success`, it is charged normally.
 
 If a response is lost or the client cannot tell whether the server received a request, resend the exact same `request_id` and body. Never generate a new ID for a network retry.
 
@@ -361,12 +363,15 @@ Pre-runtime errors use a non-2xx HTTP status and this shape:
 | 404 | `test_api_model_unavailable` | Model is unavailable to this key | No |
 | 409 | `idempotency_conflict` | Same request ID, different body | No |
 | 409 | `request_in_progress` | Identical request is still executing | No |
+| 429 | `test_api_client_error_rate_limited` | Too many invalid requests from this key; wait for `Retry-After` | No |
 | 422 | `decision_not_required` | No decision is required for this seat | No |
 | 422 | `decision_window_inconsistent` | Legal actions differ across trailing announcement events | No |
 | 503 | `model_unavailable` | No model runtime is routable | No |
 | 503 | `model_policy_unavailable` | Deployment policy rejects Test API use | No |
 
 JSON type errors, missing required fields, and unknown fields may return `400` or `422` from the HTTP JSON extractor. They do not reach runtime and are not charged. Server-side `5xx` messages are redacted to `internal server error`.
+
+Repeated invalid requests can temporarily rate-limit `/decision` for that key. A `429` response includes `Retry-After`; wait for it and fix the invalid request source. This temporary protection does not revoke the key.
 
 Log only the HTTP status, stable error code, your request ID, and timestamp. Never log a full key or a request body containing hidden information.
 
@@ -379,8 +384,10 @@ Log only the HTTP status, stable error code, your request ID, and timestamp. Nev
 5. Reuse the exact ID and body for network retries.
 6. Check `attempt.status` even when HTTP status is `200`.
 7. On success, execute `attempt.action` and verify it through `selected_action_id`.
-8. Poll `/quota` and stop starting new decisions when quota is unavailable.
-9. Ignore unknown response fields for forward-compatible v1 extensions.
+8. Do not call `/decision` for platform-resolved or no-choice windows; every successful action response is charged.
+9. Honor `Retry-After` on `429` and fix repeated invalid requests before resuming.
+10. Poll `/quota` and stop starting new decisions when quota is unavailable.
+11. Ignore unknown response fields for forward-compatible v1 extensions.
 
 ## 11. Versioning
 

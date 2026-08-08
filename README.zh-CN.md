@@ -317,9 +317,9 @@ curl -X POST https://api.nashout.com/beta/v1/decision \
 
 ## 8. 计费、续局与幂等
 
-1. 结构、模型和路由校验通过后，服务端在进入运行时前原子预留所选模型成本对应的并发额度。
-2. 只有通过服务端合法动作校验的 `success` 结果消耗额度；`failure`、`timeout` 和 `abstain` 均返回 `quota.consumed="0.000"`。
-3. 认证失败、格式错误、模型不支持、路由不可用等在运行时前拒绝的请求不扣额度。
+1. 结构、模型和路由校验通过后，服务端在处理决策前原子预留所选模型成本对应的并发额度。
+2. 每个通过服务端合法动作校验的 `success` 动作响应都按所选模型倍率消耗额度，包括只有一个合法动作的响应；`failure`、`timeout` 和 `abstain` 均返回 `quota.consumed="0.000"`。
+3. 认证失败、格式错误、模型不支持、路由不可用等决策前拒绝不扣额度。
 4. `request_id` 是同一 API Key 内的幂等键。
 5. 相同 ID 与完全相同请求体返回首次终态结果，并带 `quota.replay=true`、`quota.consumed="0.000"`。
 6. 相同 ID 与不同请求体返回 `409 idempotency_conflict`。
@@ -328,6 +328,8 @@ curl -X POST https://api.nashout.com/beta/v1/decision \
 9. session 连续性只用于判断续局信用。网络中断、历史截断或不同步可能失去透支资格，但不会单独使请求非法；每次提交的标准事件流仍须能独立重放为合法场况。
 10. 订阅透支会结转：下一个五小时或周窗口先扣旧债，再获得本周期可用额度。
 11. FlyAPI 不设置每 Key 并发上限；总容量和过载拒绝由推理服务提供方负责。
+
+游戏平台已经自动处理，或客户端已知当前无需选择时，不要调用 `/decision`；若此类请求返回 `success`，仍会正常计费。
 
 若响应丢失或客户端无法确认服务端是否收到请求，应原样重发同一 `request_id` 和请求体；网络重试绝不能更换 ID。
 
@@ -361,12 +363,15 @@ curl -X POST https://api.nashout.com/beta/v1/decision \
 | 404 | `test_api_model_unavailable` | 当前 Key 无法使用该模型 | 否 |
 | 409 | `idempotency_conflict` | 相同 ID 对应了不同请求体 | 否 |
 | 409 | `request_in_progress` | 相同请求仍在执行 | 否 |
+| 429 | `test_api_client_error_rate_limited` | 当前 Key 短时间提交过多错误请求；按 `Retry-After` 等待 | 否 |
 | 422 | `decision_not_required` | 当前本席不需要决策 | 否 |
 | 422 | `decision_window_inconsistent` | 尾部公告事件前后的合法动作窗口不一致 | 否 |
 | 503 | `model_unavailable` | 当前没有可路由运行实例 | 否 |
 | 503 | `model_policy_unavailable` | 部署政策不允许测试 API 使用 | 否 |
 
 JSON 类型错误、缺少必填字段或未知字段，可能由 HTTP JSON 提取层直接返回 `400` 或 `422`；它们不会进入运行时，也不扣额度。服务端 `5xx` 的消息统一脱敏为 `internal server error`。
+
+重复的错误请求可能临时限制当前 Key 的 `/decision`。收到 `429` 时应遵守 `Retry-After`，修正持续产生错误请求的原因后再恢复；该临时保护不会吊销 Key。
 
 客户端只应记录 HTTP 状态、稳定错误码、自身 `request_id` 和时间，不要记录完整 Key 或包含隐藏信息的请求体。
 
@@ -379,8 +384,10 @@ JSON 类型错误、缺少必填字段或未知字段，可能由 HTTP JSON 提�
 5. 网络重试原样复用 ID 和完整请求体。
 6. HTTP 200 后仍检查 `attempt.status`。
 7. 成功时执行 `attempt.action`，并通过 `selected_action_id` 验证。
-8. 定期查询 `/quota`；额度不可用时停止发起新决策。
-9. 忽略不认识的响应字段，以兼容 v1 的加性扩展。
+8. 平台已自动处理或无需选择的窗口不要调用 `/decision`；每个成功动作响应都会计费。
+9. 收到 `429` 时遵守 `Retry-After`，先修正重复错误再恢复。
+10. 定期查询 `/quota`；额度不可用时停止发起新决策。
+11. 忽略不认识的响应字段，以兼容 v1 的加性扩展。
 
 ## 11. 版本规则
 
